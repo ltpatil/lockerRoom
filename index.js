@@ -1,6 +1,17 @@
 const express = require('express');
 const app = express();
+const z = require('zod');
 
+const signuptemplate = z.object({
+    username: z.string().email(),
+    password: z.string().min(6),
+    info: z.any().optional() 
+});
+
+const signintemplate = z.object({
+    username: z.string().email(),
+    password: z.string().min(6)
+});
 const users = [
     {
         username: 'dummy@gmail.com',
@@ -29,35 +40,65 @@ app.get('/', (req, res) => {
 
 
 app.post('/signup', (req, res) => {
-    const { username, password,info } = req.body;
+
+    const result = signuptemplate.safeParse(req.body);
+
+    if (!result.success) {  
+        // console.log(result.error.issues);
+        return res.status(400).json({ error: result.error.issues });
+    }
+
+    const { username, password,info } = result.data;
+
     if (users.find(user => user.username === username)) {
         return res.status(400).send('User already exists');
     }
+
     users.push({ username, password , info });
     res.status(201).send('User created successfully');
 });
 
 app.post('/signin', (req, res) => {
-    const { username, password } = req.body;
+    const result = signintemplate.safeParse(req.body);
+
+    if (!result.success) {
+        return res.status(400).json({ error: result.error.errors });
+    }
+
+    const { username, password } = result.data;
+    if (!username || !password) {
+        return res.status(400).send('Username and password are required');
+    }
+
     const user = users.find(user => user.username === username && user.password === password);
+
     if (!user) {
         return res.status(401).send('Invalid credentials');
     }
+
     const token = generateToken();
     user.token = token;
-    res.status(200).json({ token });        
+
+    res.status(200).json({ token }); 
+
 });
 
 app.get('/me', (req, res) => {
     const token = req.headers.token;
-    console.log(token);
+
     if (!token) {
         return res.status(401).send('Token missing');
     }
+
     const user = users.find(user => user.token === token);
+
     if (!user) {
         return res.status(401).send('Invalid credentials');
     }
+    if (!user.info) {
+        return res.status(404).send('No info available for this user');
+    }
+
     res.status(200).json({info: user.info });
 });
 
