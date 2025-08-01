@@ -1,6 +1,8 @@
 const express = require('express');
 const app = express();
 const z = require('zod');
+const jwt = require('jsonwebtoken');
+const secretkey = 'i dont want to use this in real, use a secure key instead';
 
 const signuptemplate = z.object({
     username: z.string().email(),
@@ -19,20 +21,22 @@ const users = [
     }
 ]
 app.use(express.json());
-function generateToken() {
-    let options = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
-        'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x',
-        'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
-        'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-        'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
-    let token = "";
-    for (let i = 0; i < 32; i++) {
-        // use a simple function here
-        token += options[Math.floor(Math.random() * options.length)];
-    }
-    return token;
-}
+// Function to generate a random token ***depricated - use JWT instead***
+// function generateToken() {
+//     let options = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
+//         'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x',
+//         'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
+//         'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+//         'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+
+//     let token = "";
+//     for (let i = 0; i < 32; i++) {
+//         // use a simple function here
+//         token += options[Math.floor(Math.random() * options.length)];
+//     }
+//     return token;
+// }
 
 app.get('/', (req, res) => {
   res.send('Welcome to Locker Room');
@@ -44,8 +48,8 @@ app.post('/signup', (req, res) => {
     const result = signuptemplate.safeParse(req.body);
 
     if (!result.success) {  
-        // console.log(result.error.issues);
-        return res.status(400).json({ error: result.error.issues });
+        // console.log(result.error.issues.message);
+        return res.status(400).json({ error: result.error.issues[0].message });
     }
 
     const { username, password,info } = result.data;
@@ -62,7 +66,7 @@ app.post('/signin', (req, res) => {
     const result = signintemplate.safeParse(req.body);
 
     if (!result.success) {
-        return res.status(400).json({ error: result.error.errors });
+        return res.status(400).json({ error: result.error.issues[0].message });
     }
 
     const { username, password } = result.data;
@@ -76,7 +80,10 @@ app.post('/signin', (req, res) => {
         return res.status(401).send('Invalid credentials');
     }
 
-    const token = generateToken();
+    const token = jwt.sign({
+        username: user.username
+    }, secretkey);
+
     user.token = token;
 
     res.status(200).json({ token }); 
@@ -90,7 +97,13 @@ app.get('/me', (req, res) => {
         return res.status(401).send('Token missing');
     }
 
-    const user = users.find(user => user.token === token);
+    const decoded = jwt.verify(token, secretkey); 
+    
+    if(!decoded || !decoded.username) {
+        return res.status(401).send('Invalid token');
+    }
+
+    const user = users.find(user => user.username === decoded.username);
 
     if (!user) {
         return res.status(401).send('Invalid credentials');
