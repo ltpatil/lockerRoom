@@ -14,12 +14,44 @@ const signintemplate = z.object({
     username: z.string().email(),
     password: z.string().min(6)
 });
+
+
+
 const users = [
     {
         username: 'dummy@gmail.com',
         password: 'dummy123'
     }
 ]
+
+function zodChk(req,res,next) {
+    const result = signuptemplate.safeParse(req.body);
+
+    if (!result.success) {  
+        // console.log(result.error.issues.message);
+        return res.status(400).json({ error: result.error.issues[0].message });
+    }
+    req.passedData = result.data; // store the parsed data in req for further use
+    next();
+}
+
+function auth(req, res, next) {
+    const token = req.headers.token;
+
+    if (!token) {
+        return res.status(401).send('Token missing');
+    }
+
+    const decoded = jwt.verify(token, secretkey); 
+    
+    if(!decoded || !decoded.username) {
+        return res.status(401).send('Invalid token');
+    }
+    req.username = decoded.username; // store the username in req for further use
+    next();
+
+}
+
 app.use(express.json());
 
 // Function to generate a random token ***depricated - use JWT instead***
@@ -43,16 +75,9 @@ app.get('/', (req, res) => {
 });
 
 
-app.post('/signup', (req, res) => {
+app.post('/signup', zodChk, (req, res) => {
 
-    const result = signuptemplate.safeParse(req.body);
-
-    if (!result.success) {  
-        // console.log(result.error.issues.message);
-        return res.status(400).json({ error: result.error.issues[0].message });
-    }
-
-    const { username, password,info } = result.data;
+    const { username, password,info } = req.passedData;
 
     if (users.find(user => user.username === username)) {
         return res.status(400).send('User already exists');
@@ -62,14 +87,9 @@ app.post('/signup', (req, res) => {
     res.status(201).send('User created successfully');
 });
 
-app.post('/signin', (req, res) => {
-    const result = signintemplate.safeParse(req.body);
-
-    if (!result.success) {
-        return res.status(400).json({ error: result.error.issues[0].message });
-    }
-
-    const { username, password } = result.data;
+app.post('/signin', zodChk, (req, res) => {
+    
+    const { username, password } = req.passedData;
     if (!username || !password) {
         return res.status(400).send('Username and password are required');
     }
@@ -84,26 +104,15 @@ app.post('/signin', (req, res) => {
         username: user.username
     }, secretkey);
 
-    user.token = token;
+    // user.token = token;  modified to use JWT instead of custom token
 
     res.status(200).json({ token }); 
 
 });
 
-app.get('/me', (req, res) => {
-    const token = req.headers.token;
-
-    if (!token) {
-        return res.status(401).send('Token missing');
-    }
-
-    const decoded = jwt.verify(token, secretkey); 
+app.get('/me', auth, (req, res) => {
     
-    if(!decoded || !decoded.username) {
-        return res.status(401).send('Invalid token');
-    }
-
-    const user = users.find(user => user.username === decoded.username);
+    const user = users.find(user => user.username === req.username);
 
     if (!user) {
         return res.status(401).send('Invalid credentials');
@@ -113,6 +122,7 @@ app.get('/me', (req, res) => {
     }
 
     res.status(200).json({info: user.info });
+    
 });
 
 app.listen(3000);
