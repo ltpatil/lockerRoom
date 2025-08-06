@@ -1,6 +1,7 @@
 const express = require('express');
 const app = express();
 const z = require('zod');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const UserModel = require('./db');
 const auth = require('./auth');
@@ -16,10 +17,6 @@ const signuptemplate = z.object({
     info: z.any().optional() 
 });
 
-const signintemplate = z.object({
-    username: z.string().email(),
-    password: z.string().min(6)
-});
 
 
 function zodChk(req,res,next) {
@@ -44,10 +41,11 @@ app.get('/', (req, res) => {
 app.post('/signup', zodChk, async (req, res) => {
 
     const { username, password,info } = req.passedData;
+    const hashedPassword = await bcrypt.hash(password, 6);
     try {
     await UserModel.create({
         username: username,
-        password :password,
+        password :hashedPassword,
         info: info
     });
         res.status(201).send('User created successfully');
@@ -62,10 +60,14 @@ app.post('/signin', zodChk, async (req, res) => {
 
     const user = await UserModel.findOne({
         username: username,
-        password: password
     });
 
     if (!user) {
+        return res.status(401).send('Invalid credentials');
+    }
+
+    const isPasswordCorrect = await bcrypt.compare(password, user.password);
+    if (!isPasswordCorrect) {
         return res.status(401).send('Invalid credentials');
     }
 
